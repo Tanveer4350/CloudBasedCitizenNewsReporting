@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f5f4ef">
+    <meta name="description" content="Share local stories and read community news reviewed by editors.">
+    <title>Civic Press — Local news, verified</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Civic Press home">
+        <span class="brand-mark">C</span>
+        <span>Civic<span class="brand-light">Press</span></span>
+      </a>
+      <nav class="main-nav" aria-label="Main navigation">
+        <button class="nav-link active" data-view="feed">The feed</button>
+        <button class="nav-link" data-view="submit" data-auth="citizen">Submit a story</button>
+        <button class="nav-link" data-view="my-reports" data-auth="citizen">My stories</button>
+        <button class="nav-link hidden" id="editor-nav" data-view="editor">Editor desk</button>
+      </nav>
+      <div class="account-area">
+        <span id="account-label" class="account-label"></span>
+        <button class="button button-outline button-small" id="account-action">Sign in</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero" id="hero">
+        <div class="hero-copy">
+          <div class="eyebrow"><span class="live-dot"></span> COMMUNITY-POWERED JOURNALISM</div>
+          <h1>Your neighborhood.<br><span>Your story.</span></h1>
+          <p>Real news starts with people who are there. Share what’s happening around you, and let our editors help get the facts out.</p>
+          <div class="hero-actions">
+            <button class="button button-dark" data-go="submit">Report a story <span aria-hidden="true">↗</span></button>
+            <button class="button button-text" data-go="feed">Explore the feed <span aria-hidden="true">↓</span></button>
+          </div>
+        </div>
+        <div class="hero-art" aria-label="Illustration of community news">
+          <div class="art-sun"></div>
+          <div class="art-paper">
+            <div class="paper-top"><span>CIVIC PRESS</span><span>THE LOCAL EDITION</span></div>
+            <div class="paper-headline">A better<br>informed<br><em>community.</em></div>
+            <div class="paper-lines"><i></i><i></i><i></i><i></i></div>
+            <div class="paper-stamp">TRUST<br>LOCAL</div>
+          </div>
+          <div class="art-label">Stories that<br>bring us closer.</div>
+          <div class="art-spark">✳</div>
+        </div>
+        <div class="hero-foot"><span>INFORMED BY YOU</span><span>VERIFIED BY EDITORS</span><span>BUILT FOR EVERYONE</span></div>
+      </section>
+
+      <section class="content-section" id="feed-section">
+        <div class="section-heading">
+          <div>
+            <div class="eyebrow">WHAT’S HAPPENING</div>
+            <h2>Latest from your community</h2>
+          </div>
+          <span class="review-note"><span class="check-mark">✓</span> Every story is editor-reviewed</span>
+        </div>
+        <form class="filters" id="filters">
+          <label class="search-wrap"><span aria-hidden="true">⌕</span><input name="q" placeholder="Search stories" aria-label="Search stories"></label>
+          <select name="category" aria-label="Filter by category">
+            <option value="">All categories</option>
+            <option>Community</option><option>Education</option><option>Environment</option>
+            <option>Health</option><option>Local Government</option><option>Public Safety</option>
+            <option>Transport</option><option>Other</option>
+          </select>
+          <label class="location-filter"><span aria-hidden="true">⌖</span><input name="location" placeholder="Town or area" aria-label="Filter by location"></label>
+          <button class="button button-dark filter-button" type="submit">Find stories</button>
+        </form>
+        <div id="feed" class="story-grid" aria-live="polite"></div>
+        <div id="feed-empty" class="empty-state hidden">
+          <span class="empty-icon">✳</span><h3>No stories here just yet</h3>
+          <p>Try a different search, or be the first to report something happening nearby.</p>
+          <button class="button button-dark" data-go="submit">Share a story</button>
+        </div>
+      </section>
+
+      <section class="workspace hidden" id="submit-section">
+        <div class="workspace-intro">
+          <div class="eyebrow">YOUR VOICE MATTERS</div>
+          <h2>Put your story<br>on the map.</h2>
+          <p>Share what you’ve seen. An editor will review your report before it appears in the public feed.</p>
+          <div class="process-note"><span>01</span><div><strong>You report</strong><small>Add the details and what makes it newsworthy.</small></div></div>
+          <div class="process-note"><span>02</span><div><strong>Editors verify</strong><small>Our editors check every report before publishing.</small></div></div>
+          <div class="process-note"><span>03</span><div><strong>Community knows</strong><small>Approved stories reach readers in your area.</small></div></div>
+        </div>
+        <form class="form-card" id="report-form">
+          <div class="form-card-heading"><div><div class="eyebrow">NEW REPORT</div><h3>Tell us what happened</h3></div><span class="secure-label">● PRIVATE UNTIL REVIEWED</span></div>
+          <label>Story headline <span class="required">*</span><input name="title" required minlength="3" maxlength="120" placeholder="A clear, specific headline"></label>
+          <div class="form-row">
+            <label>Category <span class="required">*</span><select name="category" required>
+              <option value="">Choose a category</option><option>Community</option><option>Education</option>
+              <option>Environment</option><option>Health</option><option>Local Government</option>
+              <option>Public Safety</option><option>Transport</option><option>Other</option>
+            </select></label>
+            <label>Location <span class="required">*</span><input name="location" required minlength="2" maxlength="120" placeholder="Neighborhood, town or area"></label>
+          </div>
+          <label>What’s the story? <span class="required">*</span><textarea name="body" required minlength="20" maxlength="5000" rows="7" placeholder="Share what happened, when it happened, and why your community should know. Stick to what you saw or can verify."></textarea><small class="field-hint">20–5,000 characters. Please don’t include private or identifying details about others.</small></label>
+          <label class="upload-box" for="media-input"><span class="upload-icon">＋</span><span><strong>Add a photo or video <span class="optional">(optional)</span></strong><small>JPG, PNG, WebP, MP4 or WebM · max 8 MB</small></span><input id="media-input" name="media" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"></label>
+          <div id="upload-name" class="upload-name"></div>
+          <div id="report-message" class="form-message hidden" role="status"></div>
+          <div class="form-footer"><span>By submitting, you confirm this report is accurate to the best of your knowledge.</span><button class="button button-dark" type="submit">Send for review <span aria-hidden="true">↗</span></button></div>
+        </form>
+      </section>
+
+      <section class="workspace hidden" id="my-reports-section">
+        <div class="list-heading"><div><div class="eyebrow">YOUR CONTRIBUTIONS</div><h2>My stories</h2></div><button class="button button-dark" data-go="submit">＋ New report</button></div>
+        <div class="report-list" id="my-reports"></div>
+      </section>
+
+      <section class="workspace hidden" id="editor-section">
+        <div class="list-heading"><div><div class="eyebrow">EDITOR WORKSPACE</div><h2>Review desk</h2></div><button class="button button-outline" id="refresh-editor">↻ Refresh queue</button></div>
+        <div class="editor-stats" id="editor-stats"></div>
+        <div class="report-list" id="editor-queue"></div>
+      </section>
+
+      <section class="auth-wrap hidden" id="auth-section">
+        <div class="auth-aside"><div class="eyebrow">GOOD NEWS STARTS HERE</div><h2>Be part of<br>the story.</h2><p>Join neighbors sharing useful, verified news from the places we call home.</p><span class="auth-quote">“A community that knows<br>better, does better.”</span></div>
+        <div class="auth-card">
+          <div class="auth-tabs"><button class="auth-tab active" data-auth-mode="login">Sign in</button><button class="auth-tab" data-auth-mode="register">Create account</button></div>
+          <form id="login-form" class="auth-form"><div><h3>Welcome back</h3><p>Sign in to share a report or check your stories.</p></div><label>Email address<input name="email" type="email" autocomplete="email" required placeholder="you@example.com"></label><label>Password<input name="password" type="password" autocomplete="current-password" required minlength="8" placeholder="Your password"></label><div id="login-message" class="form-message hidden" role="alert"></div><button class="button button-dark auth-submit" type="submit">Sign in <span aria-hidden="true">↗</span></button></form>
+          <form id="register-form" class="auth-form hidden"><div><h3>Make your voice heard</h3><p>Create a free citizen reporter account.</p></div><label>Email address<input name="email" type="email" autocomplete="email" required placeholder="you@example.com"></label><label>Password<input name="password" type="password" autocomplete="new-password" required minlength="8" maxlength="128" placeholder="At least 8 characters"></label><div id="register-message" class="form-message hidden" role="alert"></div><button class="button button-dark auth-submit" type="submit">Create account <span aria-hidden="true">↗</span></button></form>
+          <p class="auth-footnote">Editors: sign in with your editor account to access the review desk.</p>
+        </div>
+      </section>
+    </main>
+    <footer class="footer"><a class="brand footer-brand" href="/"><span class="brand-mark">C</span><span>Civic<span class="brand-light">Press</span></span></a><span>Local voices. Verified stories. Stronger communities.</span><span>© 2026 Civic Press</span></footer>
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>
