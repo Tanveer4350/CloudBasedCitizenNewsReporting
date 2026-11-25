@@ -14,6 +14,7 @@ const views = {
   submit: document.querySelector("#submit-section"),
   "my-reports": document.querySelector("#my-reports-section"),
   editor: document.querySelector("#editor-section"),
+  admin: document.querySelector("#admin-section"),
   auth: document.querySelector("#auth-section"),
 };
 
@@ -66,9 +67,11 @@ function updateAccount() {
   const action = document.querySelector("#account-action");
   const label = document.querySelector("#account-label");
   const editorNav = document.querySelector("#editor-nav");
+  const adminNav = document.querySelector("#admin-nav");
   action.textContent = currentUser ? "Sign out" : "Sign in";
   label.textContent = currentUser ? currentUser.email : "";
   editorNav.classList.toggle("hidden", currentUser?.role !== "editor");
+  adminNav.classList.toggle("hidden", currentUser?.role !== "admin");
   document.querySelectorAll('[data-auth="citizen"]').forEach((item) => {
     item.classList.toggle("hidden", !currentUser || currentUser.role !== "citizen");
   });
@@ -80,6 +83,9 @@ async function showView(name) {
     name = "auth";
   }
   if (name === "editor" && currentUser?.role !== "editor") {
+    name = "feed";
+  }
+  if (name === "admin" && currentUser?.role !== "admin") {
     name = "feed";
   }
 
@@ -94,6 +100,7 @@ async function showView(name) {
   if (name === "feed") await loadFeed();
   if (name === "my-reports") await loadMyReports();
   if (name === "editor") await loadEditorQueue();
+  if (name === "admin") await loadAdminQueue();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -156,7 +163,7 @@ async function loadMyReports() {
   }
 }
 
-function editorCard(report) {
+function reviewCard(report, endpoint) {
   const categoryOptions = categories.map((category) =>
     `<option${category === report.category ? " selected" : ""}>${escapeHtml(category)}</option>`
   ).join("");
@@ -166,7 +173,7 @@ function editorCard(report) {
       <h3>${escapeHtml(report.title)}</h3>
       <p>${escapeHtml(report.body)}</p>
       ${report.media_url ? `<p><a href="${escapeHtml(report.media_url)}" target="_blank" rel="noopener">Open attached ${report.media_type?.startsWith("video/") ? "video" : "photo"}</a></p>` : ""}
-      <form class="editor-review" data-review-form="${escapeHtml(report.id)}">
+      <form class="editor-review" data-review-form="${escapeHtml(report.id)}" data-review-endpoint="${endpoint}">
         <label>Headline<input name="title" value="${escapeHtml(report.title)}" maxlength="120" required></label>
         <label>Location<input name="location" value="${escapeHtml(report.location)}" maxlength="120" required></label>
         <label>Category<select name="category">${categoryOptions}</select></label>
@@ -177,15 +184,13 @@ function editorCard(report) {
     </article>`;
 }
 
-async function loadEditorQueue() {
-  const list = document.querySelector("#editor-queue");
-  const stats = document.querySelector("#editor-stats");
+async function loadReviewQueue({ list, stats, endpoint }) {
   list.innerHTML = '<p class="loading-note">Loading the review queue…</p>';
   try {
     const [pending, approved, rejected] = await Promise.all([
-      api("/api/editor/reports?status=pending"),
-      api("/api/editor/reports?status=approved"),
-      api("/api/editor/reports?status=rejected"),
+      api(`${endpoint}?status=pending`),
+      api(`${endpoint}?status=approved`),
+      api(`${endpoint}?status=rejected`),
     ]);
     stats.innerHTML = [
       ["pending", pending.reports.length],
@@ -193,11 +198,27 @@ async function loadEditorQueue() {
       ["rejected", rejected.reports.length],
     ].map(([label, count]) => `<div class="editor-stat"><strong>${count}</strong><span>${label}</span></div>`).join("");
     list.innerHTML = pending.reports.length
-      ? pending.reports.map(editorCard).join("")
+      ? pending.reports.map((report) => reviewCard(report, endpoint)).join("")
       : '<div class="empty-state"><span class="empty-icon">✓</span><h3>You’re all caught up</h3><p>New citizen reports will appear here for review.</p></div>';
   } catch (error) {
     list.innerHTML = `<p class="form-message error">${escapeHtml(error.message)}</p>`;
   }
+}
+
+function loadEditorQueue() {
+  return loadReviewQueue({
+    list: document.querySelector("#editor-queue"),
+    stats: document.querySelector("#editor-stats"),
+    endpoint: "/api/editor/reports",
+  });
+}
+
+function loadAdminQueue() {
+  return loadReviewQueue({
+    list: document.querySelector("#admin-queue"),
+    stats: document.querySelector("#admin-stats"),
+    endpoint: "/api/admin/reports",
+  });
 }
 
 document.querySelectorAll("[data-view]").forEach((button) => {
@@ -316,7 +337,7 @@ document.querySelector("#report-form").addEventListener("submit", async (event) 
   }
 });
 
-document.querySelector("#editor-queue").addEventListener("submit", async (event) => {
+async function submitReview(event) {
   const form = event.target.closest("[data-review-form]");
   if (!form) return;
   event.preventDefault();
@@ -325,7 +346,7 @@ document.querySelector("#editor-queue").addEventListener("submit", async (event)
   const buttons = form.querySelectorAll("button");
   buttons.forEach((button) => { button.disabled = true; });
   try {
-    await api(`/api/editor/reports/${encodeURIComponent(form.dataset.reviewForm)}`, {
+    await api(`${form.dataset.reviewEndpoint}/${encodeURIComponent(form.dataset.reviewForm)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -333,7 +354,13 @@ document.querySelector("#editor-queue").addEventListener("submit", async (event)
         action,
       }),
     });
-    await loadEditorQueue();
+    await loadReviewQueue({
+      list: form.closest("#admin-queue") || document.querySelector("#editor-queue"),
+      stats: form.closest("#admin-queue")
+        ? document.querySelector("#admin-stats")
+        : document.querySelector("#editor-stats"),
+      endpoint: form.dataset.reviewEndpoint,
+    });
   } catch (error) {
     buttons.forEach((button) => { button.disabled = false; });
     let message = form.querySelector(".form-message");
@@ -344,9 +371,12 @@ document.querySelector("#editor-queue").addEventListener("submit", async (event)
     }
     setMessage(message, error.message, true);
   }
-});
+}
 
+document.querySelector("#editor-queue").addEventListener("submit", submitReview);
 document.querySelector("#refresh-editor").addEventListener("click", loadEditorQueue);
+document.querySelector("#admin-queue").addEventListener("submit", submitReview);
+document.querySelector("#refresh-admin").addEventListener("click", loadAdminQueue);
 
 async function start() {
   try {

@@ -127,6 +127,7 @@ def cloud_select(
     filters: dict[str, str] | None = None,
     order: str | None = None,
     limit: int | None = None,
+    offset: int | None = None,
 ) -> list[dict]:
     params = {"select": "*"}
     for column, value in (filters or {}).items():
@@ -135,6 +136,8 @@ def cloud_select(
         params["order"] = order
     if limit is not None:
         params["limit"] = str(limit)
+    if offset is not None:
+        params["offset"] = str(offset)
     response = supabase_request("GET", f"/rest/v1/{table}", params=params)
     return response.json()
 
@@ -222,7 +225,7 @@ def initialize_database() -> None:
                 id TEXT PRIMARY KEY,
                 email TEXT NOT NULL UNIQUE COLLATE NOCASE,
                 password_hash TEXT NOT NULL,
-                role TEXT NOT NULL CHECK (role IN ('citizen', 'editor')),
+                role TEXT NOT NULL CHECK (role IN ('citizen', 'editor', 'admin')),
                 created_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS reports (
@@ -248,6 +251,29 @@ def initialize_database() -> None:
                 ON reports(reporter_id, created_at DESC);
             """
         )
+        user_table = connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'"
+        ).fetchone()
+        if user_table and "'admin'" not in user_table["sql"]:
+            connection.execute("PRAGMA foreign_keys = OFF")
+            connection.executescript(
+                """
+                BEGIN;
+                CREATE TABLE users_new (
+                    id TEXT PRIMARY KEY,
+                    email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                    password_hash TEXT NOT NULL,
+                    role TEXT NOT NULL CHECK (role IN ('citizen', 'editor', 'admin')),
+                    created_at TEXT NOT NULL
+                );
+                INSERT INTO users_new (id, email, password_hash, role, created_at)
+                    SELECT id, email, password_hash, role, created_at FROM users;
+                DROP TABLE users;
+                ALTER TABLE users_new RENAME TO users;
+                COMMIT;
+                """
+            )
+            connection.execute("PRAGMA foreign_keys = ON")
 
 
 def hash_password(password: str, salt: bytes | None = None) -> str:
@@ -311,8 +337,14 @@ def get_current_user(request: Request) -> dict:
 
 
 def require_editor(user: dict = Depends(get_current_user)) -> dict:
-    if user["role"] != "editor":
+    if user["role"] not in {"editor", "admin"}:
         raise HTTPException(status_code=403, detail="Editor access is required.")
+    return user
+
+
+def require_admin(user: dict = Depends(get_current_user)) -> dict:
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Administrator access is required.")
     return user
 
 
@@ -723,12 +755,41 @@ def editor_reports(
     return {"reports": [serialize_report(row) for row in rows]}
 
 
-@app.patch("/api/editor/reports/{report_id}")
-def review_report(
-    report_id: str,
-    payload: ReviewInput,
-    editor: dict = Depends(require_editor),
+@app.get("/api/admin/reports")
+def admin_reports(
+    status: Literal["pending", "approved", "rejected", "all"] = "pending",
+    _: dict = Depends(require_admin),
 ):
+    if cloud_mode():
+        filters = {} if status == "all" else {"status": status}
+        rows = []
+        offset = 0
+        while True:
+            page = cloud_select(
+                "reports",
+                filters=filters,
+                order="created_at.desc",
+                limit=200,
+                offset=offset,
+            )
+            rows.extend(page)
+            if len(page) < 200:
+                break
+            offset += len(page)
+        return {"reports": [serialize_report(row) for row in rows]}
+    with database() as connection:
+        query = "SELECT * FROM reports"
+        parameters: tuple[str, ...] = ()
+        if status != "all":
+            query += " WHERE status = ?"
+            parameters = (status,)
+        rows = connection.execute(
+            query + " ORDER BY created_at DESC", parameters
+        ).fetchall()
+    return {"reports": [serialize_report(row) for row in rows]}
+
+
+def update_report_review(report_id: str, payload: ReviewInput, reviewer: dict) -> dict:
     if cloud_mode():
         rows = cloud_select("reports", filters={"id": report_id}, limit=1)
         row = rows[0] if rows else None
@@ -753,7 +814,7 @@ def review_report(
                 "location": location,
                 "status": status,
                 "editor_note": payload.editor_note.strip(),
-                "editor_id": editor["id"],
+                "editor_id": reviewer["id"],
                 "updated_at": now_iso(),
             },
         )
@@ -781,19 +842,38 @@ def review_report(
                WHERE id = ?""",
             (
                 title, body, category, location, status,
-                payload.editor_note.strip(), editor["id"], now_iso(), report_id,
+                payload.editor_note.strip(), reviewer["id"], now_iso(), report_id,
             ),
         )
     return {"id": report_id, "status": status}
 
 
-def create_editor_account() -> int:
+@app.patch("/api/editor/reports/{report_id}")
+def review_report(
+    report_id: str,
+    payload: ReviewInput,
+    editor: dict = Depends(require_editor),
+):
+    return update_report_review(report_id, payload, editor)
+
+
+@app.patch("/api/admin/reports/{report_id}")
+def admin_review_report(
+    report_id: str,
+    payload: ReviewInput,
+    admin: dict = Depends(require_admin),
+):
+    return update_report_review(report_id, payload, admin)
+
+
+def create_staff_account(role: Literal["editor", "admin"]) -> int:
     initialize_database()
-    email = input("Editor email: ").strip().lower()
+    label = "Admin" if role == "admin" else "Editor"
+    email = input(f"{label} email: ").strip().lower()
     if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
         print("Enter a valid email address.", file=sys.stderr)
         return 1
-    password = getpass("Editor password (8+ characters): ")
+    password = getpass(f"{label} password (8+ characters): ")
     if len(password) < 8:
         print("Password must be at least 8 characters.", file=sys.stderr)
         return 1
@@ -805,7 +885,7 @@ def create_editor_account() -> int:
                     "id": uuid.uuid4().hex,
                     "email": email,
                     "password_hash": hash_password(password),
-                    "role": "editor",
+                    "role": role,
                     "created_at": now_iso(),
                 },
             )
@@ -819,20 +899,27 @@ def create_editor_account() -> int:
             try:
                 connection.execute(
                     "INSERT INTO users (id, email, password_hash, role, created_at) "
-                    "VALUES (?, ?, ?, 'editor', ?)",
-                    (uuid.uuid4().hex, email, hash_password(password), now_iso()),
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (uuid.uuid4().hex, email, hash_password(password), role, now_iso()),
                 )
             except sqlite3.IntegrityError:
                 print("An account with that email already exists.", file=sys.stderr)
                 return 1
-    print(f"Editor account created for {email}.")
+    print(f"{label} account created for {email}.")
     return 0
+
+
+def create_editor_account() -> int:
+    return create_staff_account("editor")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the Civic Press local news platform.")
     parser.add_argument("--create-editor", action="store_true", help="Create an editor login.")
+    parser.add_argument("--create-admin", action="store_true", help="Create an administrator login.")
     arguments = parser.parse_args()
     if arguments.create_editor:
         raise SystemExit(create_editor_account())
+    if arguments.create_admin:
+        raise SystemExit(create_staff_account("admin"))
     uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=False)

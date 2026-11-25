@@ -19,6 +19,7 @@
         <button class="nav-link" data-view="submit" data-auth="citizen">Submit a story</button>
         <button class="nav-link" data-view="my-reports" data-auth="citizen">My stories</button>
         <button class="nav-link hidden" id="editor-nav" data-view="editor">Editor desk</button>
+        <button class="nav-link hidden" id="admin-nav" data-view="admin">Admin</button>
       </nav>
       <div class="account-area">
         <span id="account-label" class="account-label"></span>
@@ -115,6 +116,13 @@
         <div class="list-heading"><div><div class="eyebrow">EDITOR WORKSPACE</div><h2>Review desk</h2></div><button class="button button-outline" id="refresh-editor">↻ Refresh queue</button></div>
         <div class="editor-stats" id="editor-stats"></div>
         <div class="report-list" id="editor-queue"></div>
+      </section>
+
+      <section class="workspace hidden" id="admin-section">
+        <div class="list-heading"><div><div class="eyebrow">ADMINISTRATION</div><h2>Verification requests</h2></div><button class="button button-outline" id="refresh-admin">↻ Refresh requests</button></div>
+        <p>Review every submitted report. Approving publishes it in the community feed for all visitors.</p>
+        <div class="editor-stats" id="admin-stats"></div>
+        <div class="report-list" id="admin-queue"></div>
       </section>
 
       <section class="auth-wrap hidden" id="auth-section">

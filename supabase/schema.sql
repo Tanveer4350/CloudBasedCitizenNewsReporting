@@ -2,7 +2,8 @@ CREATE TABLE IF NOT EXISTS public.users (
     id text PRIMARY KEY,
     email text NOT NULL UNIQUE,
     password_hash text NOT NULL,
-    role text NOT NULL CHECK (role IN ('citizen', 'editor')),
+    role text NOT NULL CONSTRAINT users_role_check
+        CHECK (role IN ('citizen', 'editor', 'admin')),
     created_at text NOT NULL
 );
 
