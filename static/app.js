@@ -8,6 +8,7 @@ const categories = [
   "Transport",
   "Other",
 ];
+const LIVE_REFRESH_MS = 15_000;
 
 const views = {
   feed: document.querySelector("#feed-section"),
@@ -20,6 +21,9 @@ const views = {
 
 let currentUser = null;
 let nextView = "feed";
+let currentView = "feed";
+let feedRequestId = 0;
+const reviewQueueFingerprints = new Map();
 
 function escapeHtml(value = "") {
   return String(value).replace(/[&<>"']/g, (character) => ({
@@ -88,6 +92,7 @@ async function showView(name) {
   if (name === "admin" && currentUser?.role !== "admin") {
     name = "feed";
   }
+  currentView = name;
 
   Object.entries(views).forEach(([key, element]) => {
     element.classList.toggle("hidden", key !== name);
@@ -120,18 +125,23 @@ function storyCard(report) {
     </article>`;
 }
 
-async function loadFeed() {
+async function loadFeed({ silent = false } = {}) {
   const form = document.querySelector("#filters");
   const params = new URLSearchParams(new FormData(form));
   const feed = document.querySelector("#feed");
   const empty = document.querySelector("#feed-empty");
-  feed.innerHTML = '<div class="loading-note">Finding the latest community stories…</div>';
-  empty.classList.add("hidden");
+  const requestId = ++feedRequestId;
+  if (!silent) {
+    feed.innerHTML = '<div class="loading-note">Finding the latest community stories…</div>';
+    empty.classList.add("hidden");
+  }
   try {
     const result = await api(`/api/news?${params}`);
+    if (requestId !== feedRequestId) return;
     feed.innerHTML = result.reports.map(storyCard).join("");
     empty.classList.toggle("hidden", result.reports.length !== 0);
   } catch (error) {
+    if (requestId !== feedRequestId || silent) return;
     feed.innerHTML = `<p class="form-message error">${escapeHtml(error.message)}</p>`;
   }
 }
@@ -150,16 +160,16 @@ function reportRow(report) {
     </article>`;
 }
 
-async function loadMyReports() {
+async function loadMyReports({ silent = false } = {}) {
   const list = document.querySelector("#my-reports");
-  list.innerHTML = '<p class="loading-note">Loading your stories…</p>';
+  if (!silent) list.innerHTML = '<p class="loading-note">Loading your stories…</p>';
   try {
     const result = await api("/api/my-reports");
     list.innerHTML = result.reports.length
       ? result.reports.map(reportRow).join("")
       : '<div class="empty-state"><span class="empty-icon">✳</span><h3>Your first story starts here</h3><p>Share something happening in your community.</p><button class="button button-dark" data-go="submit">Write a report</button></div>';
   } catch (error) {
-    list.innerHTML = `<p class="form-message error">${escapeHtml(error.message)}</p>`;
+    if (!silent) list.innerHTML = `<p class="form-message error">${escapeHtml(error.message)}</p>`;
   }
 }
 
@@ -184,14 +194,21 @@ function reviewCard(report, endpoint) {
     </article>`;
 }
 
-async function loadReviewQueue({ list, stats, endpoint }) {
-  list.innerHTML = '<p class="loading-note">Loading the review queue…</p>';
+async function loadReviewQueue({ list, stats, endpoint, silent = false }) {
+  if (!silent) list.innerHTML = '<p class="loading-note">Loading the review queue…</p>';
   try {
     const [pending, approved, rejected] = await Promise.all([
       api(`${endpoint}?status=pending`),
       api(`${endpoint}?status=approved`),
       api(`${endpoint}?status=rejected`),
     ]);
+    const fingerprint = JSON.stringify(
+      [pending, approved, rejected].map(({ reports }) =>
+        reports.map(({ id, updated_at }) => [id, updated_at])
+      )
+    );
+    if (silent && reviewQueueFingerprints.get(endpoint) === fingerprint) return;
+    reviewQueueFingerprints.set(endpoint, fingerprint);
     stats.innerHTML = [
       ["pending", pending.reports.length],
       ["published", approved.reports.length],
@@ -219,6 +236,29 @@ function loadAdminQueue() {
     stats: document.querySelector("#admin-stats"),
     endpoint: "/api/admin/reports",
   });
+}
+
+function refreshActiveView() {
+  if (document.visibilityState !== "visible") return;
+  if (currentView === "feed") {
+    loadFeed({ silent: true });
+  } else if (currentView === "my-reports") {
+    loadMyReports({ silent: true });
+  } else if (currentView === "editor") {
+    loadReviewQueue({
+      list: document.querySelector("#editor-queue"),
+      stats: document.querySelector("#editor-stats"),
+      endpoint: "/api/editor/reports",
+      silent: true,
+    });
+  } else if (currentView === "admin") {
+    loadReviewQueue({
+      list: document.querySelector("#admin-queue"),
+      stats: document.querySelector("#admin-stats"),
+      endpoint: "/api/admin/reports",
+      silent: true,
+    });
+  }
 }
 
 document.querySelectorAll("[data-view]").forEach((button) => {
@@ -276,7 +316,13 @@ document.querySelector("#login-form").addEventListener("submit", async (event) =
     });
     currentUser = user.user;
     updateAccount();
-    await showView(nextView);
+    await showView(
+      currentUser.role === "admin"
+        ? "admin"
+        : currentUser.role === "editor"
+          ? "editor"
+          : nextView
+    );
   } catch (error) {
     setMessage(message, error.message, true);
   } finally {
@@ -377,6 +423,8 @@ document.querySelector("#editor-queue").addEventListener("submit", submitReview)
 document.querySelector("#refresh-editor").addEventListener("click", loadEditorQueue);
 document.querySelector("#admin-queue").addEventListener("submit", submitReview);
 document.querySelector("#refresh-admin").addEventListener("click", loadAdminQueue);
+window.setInterval(refreshActiveView, LIVE_REFRESH_MS);
+document.addEventListener("visibilitychange", refreshActiveView);
 
 async function start() {
   try {

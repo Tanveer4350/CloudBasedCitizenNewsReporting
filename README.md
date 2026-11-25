@@ -18,7 +18,7 @@ Open [http://127.0.0.1:8000](http://127.0.0.1:8000). Create citizen accounts in 
 
 ## Connect Supabase free tier
 
-The app's backend stays on your computer, while report/account records and uploaded media are stored in Supabase.
+During local setup, the backend runs on your computer, while report/account records and uploaded media are stored in Supabase.
 
 1. Create a Supabase project.
 2. In the Supabase SQL Editor, run [`supabase/schema.sql`](supabase/schema.sql).
@@ -45,6 +45,14 @@ The app loads `.env` at startup. Keep that file local; it is excluded from Git.
 Local mode stores reports in `news.db` and uploaded media in `uploads/` on this computer only. To share the same feed with other people, configure Supabase cloud mode and deploy this FastAPI app to an internet-accessible host; visitors must use that hosted URL. Reports approved by an administrator are then returned in the public feed. Creating an admin account is a one-time server command (`python app.py --create-admin`); registration never grants admin access. Editors can continue using the separate Editor desk.
 
 No hosting provider can promise data will exist forever. Use a managed database/storage plan that meets your retention needs, set up and periodically test backups/exports, and keep the hosting account and Supabase project active. Supabase free projects may pause after inactivity.
+
+## Deploy the online app to Render
+
+The repository includes [`render.yaml`](render.yaml) for a Render web service. Push the latest code to GitHub, then in Render choose **New → Blueprint**, connect this repository, and confirm the Blueprint. When prompted, enter `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` as secret environment values; never add them to the repository. The Blueprint generates a persistent `NEWS_SECRET`, enables secure cookies, installs the requirements, and starts Uvicorn on Render's assigned port. Wait for the service health check to pass, then open its `onrender.com` URL and create a citizen account there.
+
+Create the production admin in Supabase by running `python app.py --create-admin` from a trusted computer with this project's cloud `.env` configured. It creates the admin in the shared Supabase database; the admin account from local SQLite is separate. Sign in at the deployed URL to review reports.
+
+The feed, reporter status, and open review queue refresh every 15 seconds while the browser tab is visible. This is near-real-time polling, not a continuous WebSocket connection. Render's free web service can sleep while idle, so the first visit after inactivity can take longer. Supabase holds the shared records and private media across app restarts; continue to configure and test backups.
 
 ## Local development
 
@@ -78,4 +86,4 @@ supabase/       SQL schema for the cloud database
 
 ## Current cloud scope
 
-With Supabase configured, account/report records and report media are cloud-backed, but the FastAPI server still needs to be running on your computer. Existing local SQLite data is not automatically copied to Supabase. Hosting the API publicly is a separate deployment step.
+With Supabase configured, account/report records and report media are cloud-backed. Once deployed, the FastAPI service and Supabase project must remain available for other people to use the online feed. Existing local SQLite data is not automatically copied to Supabase.

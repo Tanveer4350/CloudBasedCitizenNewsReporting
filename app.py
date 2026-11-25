@@ -421,6 +421,12 @@ def home():
 
 @app.get("/api/health")
 def health():
+    if cloud_mode():
+        cloud_select("users", limit=1)
+        supabase_request("GET", f"/storage/v1/bucket/{SUPABASE_BUCKET}")
+    else:
+        with database() as connection:
+            connection.execute("SELECT 1")
     return {"status": "ok", "storage": "supabase" if cloud_mode() else "local"}
 
 
@@ -442,7 +448,8 @@ def report_media(filename: str, request: Request):
             users = cloud_select("users", filters={"id": user_id}, limit=1) if user_id else []
             user = users[0] if users else None
             if not user or (
-                user["id"] != report["reporter_id"] and user["role"] != "editor"
+                user["id"] != report["reporter_id"]
+                and user["role"] not in {"editor", "admin"}
             ):
                 raise HTTPException(status_code=404, detail="Media not found.")
         return FastAPIResponse(
@@ -471,7 +478,8 @@ def report_media(filename: str, request: Request):
                 "SELECT id, role FROM users WHERE id = ?", (user_id,)
             ).fetchone() if user_id else None
             if not user or (
-                user["id"] != report["reporter_id"] and user["role"] != "editor"
+                user["id"] != report["reporter_id"]
+                and user["role"] not in {"editor", "admin"}
             ):
                 raise HTTPException(status_code=404, detail="Media not found.")
         cache_control = (
